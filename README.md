@@ -1,25 +1,22 @@
-OTUS Linux Professional Lesson #6 | Subject: LVM
+#### OTUS Linux Professional Lesson #6 | Subject: LVM
 
-ЦЕЛЬ: НАУЧИТЬСЯ РАБОТАТЬ С LVM
+#### ЦЕЛЬ: НАУЧИТЬСЯ РАБОТАТЬ С LVM
 
-ЗАДАЧИ:
+#### ЗАДАЧИ:
 1. Уменьшить том / до 8GB
 2. Выделить том под /var в зеркало
 3. Выделить том под /home
 4. Создать снапшот тома /home, восстановить удалённые файлы со снапшота
 
-ВИДЕОЗАПИСЬ С ПРОЦЕССОМ ВЫПОЛНЕНИЯ: https://cloud.baltbereg.com/index.php/s/JCT4Gittno39jRn
+#### ВИДЕОЗАПИСЬ С ПРОЦЕССОМ ВЫПОЛНЕНИЯ: https://cloud.baltbereg.com/index.php/s/JCT4Gittno39jRn
 
-МЕТОДИЧКА:
+#### ПРОЦЕСС ВЫПОЛНЕНИЯ:
 
-ЗАДАНИЕ 1. Уменьшить том / до 8GB
+#### ЗАДАНИЕ 1. Уменьшить том / до 8GB
 
-Эту часть можно выполнить разными способами, в данном примере мы будем
-уменьшать / до 8G без использования LiveCD.
-Если вы оставили том /dev/sdb из прошлых примеров заполненным, очистите его (или создайте чистый стенд).
-Перед началом работы поставьте пакет xfsdump - он будет необходим для снятия копии / тома.
+Эту часть можно выполнить разными способами, в данном примере мы будем уменьшать / до 8G без использования LiveCD. Если вы оставили том /dev/sdb из прошлых примеров заполненным, очистите его (или создайте чистый стенд). Перед началом работы поставьте пакет xfsdump - он будет необходим для снятия копии / тома.
 Подготовим временный том для / раздела:
-
+```
 [root@lvm ~]# pvcreate /dev/sdb
   Physical volume "/dev/sdb" successfully created.
 
@@ -30,9 +27,9 @@ OTUS Linux Professional Lesson #6 | Subject: LVM
 WARNING: ext4 signature detected on /dev/vg_root/lv_root at offset 1080. Wipe it? [y/n]: y
   Wiping ext4 signature on /dev/vg_root/lv_root.
   Logical volume "lv_root" created.
-
+```
 Создадим на нем файловую систему и смонтируем его, чтобы перенести туда данные:
-
+```
 [root@lvm ~]# mkfs.xfs /dev/vg_root/lv_root
 meta-data=/dev/vg_root/lv_root   isize=512    agcount=4, agsize=655104 blks
          =                       sectsz=512   attr=2, projid32bit=1
@@ -45,20 +42,20 @@ log      =internal log           bsize=4096   blocks=2560, version=2
 realtime =none                   extsz=4096   blocks=0, rtextents=0
 
 [root@lvm ~]# mount /dev/vg_root/lv_root /mnt
-
+```
 Этой командой копируем все данные с / раздела в /mnt:
-
+```
 [root@lvm ~]# yum install xfsdump
 
 [root@lvm ~]# xfsdump -J - /dev/VolGroup00/LogVol00 | xfsrestore -J - /mnt
 …
 xfsrestore: Restore Status: SUCCESS
-
+```
 Тут вывод большой, но в итоге вы должны увидеть SUCCESS. Проверить что скопировалось можно командой ls /mnt.
 
 Затем сконфигурируем grub для того, чтобы при старте перейти в новый /.
 Сымитируем текущий root, сделаем в него chroot и обновим grub:
-
+```
 [root@lvm ~]# for i in /proc/ /sys/ /dev/ /run/ /boot/; \
  do mount --bind $i /mnt/$i; done
 
@@ -71,16 +68,16 @@ Found initrd image: /boot/initramfs-3.10.0-1160.102.1.el7.x86_64.img
 Found linux image: /boot/vmlinuz-3.10.0-862.2.3.el7.x86_64
 Found initrd image: /boot/initramfs-3.10.0-862.2.3.el7.x86_64.img
 done
-
+```
 Обновим образ initrd. Что это такое и зачем нужно вы узнаете из следующей лекции.
-
+```
 [root@lvm /]# cd /boot ; for i in `ls initramfs-*img`; \
 do dracut -v $i `echo $i|sed "s/initramfs-//g; \
 > s/.img//g"` --force; done
-
+```
 Ну и для того, чтобы при загрузке был смонтирован нужны root нужно в файле
 /boot/grub2/grub.cfg заменить rd.lvm.lv=VolGroup00/LogVol00 на rd.lvm.lv=vg_root/lv_root
-
+```
 [root@lvm ~]# lsblk
 NAME                    MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
 sda                       8:0    0   40G  0 disk 
@@ -102,9 +99,9 @@ sde                       8:64   0    1G  0 disk
 │ └─vg0-mirror          253:7    0  816M  0 lvm  
 └─vg0-mirror_rimage_1   253:6    0  816M  0 lvm  
   └─vg0-mirror          253:7    0  816M  0 lvm  
-
+```
 Теперь нам нужно изменить размер старой VG и вернуть на него рут. Для этого удаляем старый LV размером в 40G и создаём новый на 8G:
-
+```
 [root@lvm ~]# lvremove /dev/VolGroup00/LogVol00
 Do you really want to remove active logical volume VolGroup00/LogVol00? [y/n]: y
   Logical volume "LogVol00" successfully removed
@@ -113,9 +110,9 @@ Do you really want to remove active logical volume VolGroup00/LogVol00? [y/n]: y
 WARNING: xfs signature detected on /dev/VolGroup00/LogVol00 at offset 0. Wipe it? [y/n]: y
   Wiping xfs signature on /dev/VolGroup00/LogVol00.
   Logical volume "LogVol00" created.
-
+```
 Проделываем на нем те же операции, что и в первый раз:
-
+```
 [root@lvm ~]# mkfs.xfs /dev/VolGroup00/LogVol00
 
 [root@lvm ~]# mount /dev/VolGroup00/LogVol00 /mnt
@@ -125,9 +122,9 @@ WARNING: xfs signature detected on /dev/VolGroup00/LogVol00 at offset 0. Wipe it
 xfsrestore: using file dump (drive_simple) strategy
 …
 xfsrestore: Restore Status: SUCCESS
-
+```
 Так же как в первый раз cконфигурируем grub, за исключением правки /etc/grub2/grub.cfg
-
+```
 [root@lvm ~]# for i in /proc/ /sys/ /dev/ /run/ /boot/; \
  do mount --bind $i /mnt/$i; done
 [root@lvm ~]# chroot /mnt/
@@ -145,14 +142,14 @@ done
 Executing: /sbin/dracut -v initramfs-3.10.0-1160.102.1.el7.x86_64.img 3.10.0-1160.102.1.el7.x86_64 --force
 …
 *** Creating initramfs image file '/boot/initramfs-3.10.0-862.2.3.el7.x86_64.img' done ***
-
+```
 Пока не перезагружаемся и не выходим из под chroot - мы можем заодно перенести /var.
 
-ЗАДАНИЕ 2. Выделить том под /var в зеркало
+#### ЗАДАНИЕ 2. Выделить том под /var в зеркало
 
 Выделить том под /var в зеркало
 На свободных дисках создаем зеркало:
-
+```
 [root@lvm boot]# pvcreate /dev/sdc /dev/sdd
   Physical volume "/dev/sdc" successfully created.
   Physical volume "/dev/sdd" successfully created.
@@ -163,33 +160,33 @@ Executing: /sbin/dracut -v initramfs-3.10.0-1160.102.1.el7.x86_64.img 3.10.0-116
 [root@lvm boot]# lvcreate -L 950M -m1 -n lv_var vg_var
   Rounding up size to full physical extent 952.00 MiB
   Logical volume "lv_var" created.
-
+```
 Создаем на нем ФС и перемещаем туда /var:
-
+```
 [root@lvm boot]# mkfs.ext4 /dev/vg_var/lv_var
 mke2fs 1.42.9 (28-Dec-2013)
 Writing superblocks and filesystem accounting information: done
 
 [root@lvm boot]# mount /dev/vg_var/lv_var /mnt
 [root@lvm boot]# cp -aR /var/* /mnt/
-
+```
 На всякий случай сохраняем содержимое старого var (или же можно его просто удалить):
-
+```
 [root@lvm boot]# mkdir /tmp/oldvar && mv /var/* /tmp/oldvar
-
+```
 Ну и монтируем новый var в каталог /var:
-
+```
 [root@lvm boot]# umount /mnt
 [root@lvm boot]# mount /dev/vg_var/lv_var /var
-
+```
 Правим fstab для автоматического монтирования /var:
-
+```
 [root@lvm boot]# echo "`blkid | grep var: | awk '{print $2}'` \
  /var ext4 defaults 0 0" >> /etc/fstab
-
+```
 После чего можно успешно перезагружаться в новый (уменьшенный root) и удалять
 временную Volume Group:
-
+```
 [root@lvm ~]# lvremove /dev/vg_root/lv_root
 Do you really want to remove active logical volume vg_root/lv_root? [y/n]: y
   Logical volume "lv_root" successfully removed
@@ -199,11 +196,11 @@ Do you really want to remove active logical volume vg_root/lv_root? [y/n]: y
 
 [root@lvm ~]# pvremove /dev/sdb
   Labels on physical volume "/dev/sdb" successfully wiped.
-
-ЗАДАНИЕ 3. Выделить том под /home
+```
+#### ЗАДАНИЕ 3. Выделить том под /home
 
 Выделяем том под /home по тому же принципу что делали для /var:
-
+```
 [root@lvm ~]# lvcreate -n LogVol_Home -L 2G /dev/VolGroup00
   Logical volume "LogVol_Home" created.
 
@@ -213,29 +210,29 @@ Do you really want to remove active logical volume vg_root/lv_root? [y/n]: y
 [root@lvm ~]# rm -rf /home/*
 [root@lvm ~]# umount /mnt
 [root@lvm ~]# mount /dev/VolGroup00/LogVol_Home /home/
-
+```
 Правим fstab для автоматического монтирования /home:
-
+```
 [root@lvm ~]# echo "`blkid | grep Home | awk '{print $2}'` \
  /home xfs defaults 0 0" >> /etc/fstab
-
-ЗАДАНИЕ 4. Создать снапшот тома /home, восстановить удалённые файлы со снапшота
+```
+#### ЗАДАНИЕ 4. Создать снапшот тома /home, восстановить удалённые файлы со снапшота
 
 Генерируем файлы в /home/:
-
+```
 [root@lvm ~]# touch /home/file{1..20}
-
+```
 Снять снапшот:
-
+```
 [root@lvm ~]# lvcreate -L 100MB -s -n home_snap \
  dev/VolGroup00/LogVol_Home
-
+```
 Удалить часть файлов:
-
+```
 [root@lvm ~]# rm -f /home/file{11..20}
-
+```
 Процесс восстановления из снапшота:
-
+```
 [root@lvm ~]# umount /home
 [root@lvm ~]# lvconvert --merge /dev/VolGroup00/home_snap
   Merging of volume VolGroup00/home_snap started.
@@ -249,4 +246,4 @@ drwxr-xr-x. 20 root    root    268 Dec 14 09:31 ..
 -rw-r--r--.  1 root    root      0 Dec 14 09:51 file10
 -rw-r--r--.  1 root    root      0 Dec 14 09:51 file11
 …
-  
+```  
